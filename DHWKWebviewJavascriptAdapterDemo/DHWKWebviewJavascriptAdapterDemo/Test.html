@@ -1,0 +1,76 @@
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=2.0, user-scalable=yes" />
+<script>
+    
+// NoMiddleware
+// 单参数传递单-空参数方法接收
+function noMiddlewareClick1() {
+    window.webkit.messageHandlers.noMiddleware_noParam.postMessage({'key1':'value1', 'key2':'value2'});
+}
+// 单参数传递单-参数方法接收
+function noMiddlewareClick2() {
+    window.webkit.messageHandlers.noMiddleware_singleObj.postMessage({'key1':'value1', 'key2':'value2'});
+}
+// 数组参数传递-多参数方法接收
+function noMiddlewareClick3() {
+    window.webkit.messageHandlers.noMiddleware_arrayWithP1.postMessage(['arrayElement1', 'arrayElement2']);
+}
+// 数组参数传递-多参数方法接收
+function noMiddlewareClick4() {
+    window.webkit.messageHandlers.noMiddleware_singleObj.postMessage(['arrayElement1', 'arrayElement2']);
+}
+
+// -----------------------------
+// Middleware
+// 单参数传递单-空参数方法接收
+function middlewareClick1() {
+    window.danielMiddlewareId.middleware_noParam('1');
+}
+// 单参数传递单-参数方法接收
+function middlewareClick2() {
+    window.danielMiddlewareId.middleware_singleObj('stringParam');
+}
+// 集合参数传递-单参数方法接收
+function middlewareClick3() {
+    window.danielMiddlewareId.middleware_singleObj('value1', 'value2', 'value3');
+}
+// 集合参数传递-多参数方法接收
+function middlewareClick4() {
+    window.danielMiddlewareId.middleware_mutiObjWithP1('value1', 'value2', 'value3');
+}
+// 替换中间件中的 不替换方法
+function middlewareClick5() {
+    window.webkit.messageHandlers.middleware_notReplacedWithP1.postMessage(['arrayElement1', 'arrayElement2']);
+}
+// 同名方法响应
+function middleware_sameMethodName() {
+    window.danielMiddlewareId.middleware_sameMethodName('value1', 'value2', 'value3');
+}
+
+</script>
+<style>
+.commonButton {
+    width:100%;
+    height:30px;
+    font-size:15px;
+}
+</style>
+</head>
+<body>
+<p>无替换js中间件-window.webkit.messageHandlers.method.postMessage('');</p>
+<button class="commonButton" type="button" onclick="noMiddlewareClick1()">单参数传递单-空参数方法接收</button>
+<button class="commonButton" type="button" onclick="noMiddlewareClick2()">单参数传递单-参数方法接收</button>
+<button class="commonButton" type="button" onclick="noMiddlewareClick3()">数组参数传递-多参数方法接收</button>
+<button class="commonButton" type="button" onclick="noMiddlewareClick4()">数组参数传递-单参数方法接收</button>
+
+<p>存在不替换js中间件-window.danielMiddlewareId.method(''); 其中danielMiddlewareId为中间件标记名<p>
+<button class="commonButton" type="button" onclick="middlewareClick1()">单参数传递单-空参数方法接收</button>
+<button class="commonButton" type="button" onclick="middlewareClick2()">单参数传递单-参数方法接收</button>
+<button class="commonButton" type="button" onclick="middlewareClick3()">集合参数传递-单参数方法接收</button>
+<button class="commonButton" type="button" onclick="middlewareClick4()">集合参数传递-多参数方法接收</button>
+<button class="commonButton" type="button" onclick="middlewareClick5()">不替换方法</button>
+<button class="commonButton" type="button" onclick="middleware_sameMethodName()">同名方法响应</button>
+
+</body>
+</html>

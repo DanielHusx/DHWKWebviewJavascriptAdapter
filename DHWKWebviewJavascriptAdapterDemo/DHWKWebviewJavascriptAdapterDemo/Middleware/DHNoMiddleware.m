@@ -11,8 +11,8 @@
 @implementation DHNoMiddleware
 
 #pragma mark - DHJavascriptExport
-+ (BOOL)dh_javascriptAllNeedReplacedMethod {
-    return YES;
++ (DHJavascriptBridgeType)dh_javascriptBridgeType {
+    return DHJavascriptBridgeType_AllNotNeed;
 }
 
 #pragma mark - DHNoMiddlewareExport

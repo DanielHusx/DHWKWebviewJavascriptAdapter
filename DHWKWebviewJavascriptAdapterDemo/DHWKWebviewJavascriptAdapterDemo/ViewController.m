@@ -64,6 +64,7 @@
 }
 
 - (void)registerScriptWithUserContentController:(WKUserContentController *)userContentController {
+    // 虽然可以注册两个中间件，但是注意方法名勿重复
     [userContentController dh_registerMiddleware:[[DHNoMiddleware alloc] init]];
     [userContentController dh_registerMiddleware:[[DHMiddleware alloc] init]];
 }

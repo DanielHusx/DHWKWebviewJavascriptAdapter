@@ -20,7 +20,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)middleware_mutiObjWithP1:(id)p1 p2:(id)p2;
 /// js中存在同名方法时响应
 - (void)middleware_sameMethodName:(id)param;
-/// 不替换方法
+/// 不替换方法 => js对应window.messageHandlers.middleware_notReplacedWithP1P2.postMessage
 - (void)middleware_notReplacedWithP1:(id)p1 p2:(id)p2;
 @end
 

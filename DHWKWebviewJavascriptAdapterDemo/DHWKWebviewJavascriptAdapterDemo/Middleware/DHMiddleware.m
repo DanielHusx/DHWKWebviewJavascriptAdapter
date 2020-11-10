@@ -15,12 +15,14 @@
     return @"danielMiddlewareId";
 }
 
-+ (BOOL)dh_javascriptAllNeedReplacedMethod {
-    return NO;
++ (DHJavascriptBridgeType)dh_javascriptBridgeType {
+    return DHJavascriptBridgeType_NotAllNeed;
 }
 
-+ (NSArray *)dh_javascriptNeedNotReplacedMethod {
-    return @[@"middleware_notReplacedWithP1:p2:"];
++ (NSArray *)dh_javascriptNeedNotBridgeMethodNames {
+    return @[
+        NSStringFromSelector(@selector(middleware_notReplacedWithP1:p2:)),
+    ];
 }
 
 + (NSArray *)dh_javascriptExtendInject {
@@ -51,6 +53,10 @@
 /// 不替换方法
 - (void)middleware_notReplacedWithP1:(id)p1 p2:(id)p2 {
     [self showAlertForMessage:[NSString stringWithFormat:@"%@ invoke %s \nreceived: [p1:(class:%@)%@]; [p2:(class:%@)%@]]", self, __PRETTY_FUNCTION__, NSStringFromClass([p1 class]), p1, NSStringFromClass([p2 class]), p2]];
+}
+
+- (void)middleware_mutiObjWithP1P2:(id)p1 {
+    [self showAlertForMessage:[NSString stringWithFormat:@"%@ invoke %s \nreceived: [p1:(class:%@)%@];]", self, __PRETTY_FUNCTION__, NSStringFromClass([p1 class]), p1]];
 }
 
 #pragma mark - other

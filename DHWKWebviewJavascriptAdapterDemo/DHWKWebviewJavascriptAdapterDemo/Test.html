@@ -14,7 +14,7 @@ function noMiddlewareClick2() {
 }
 // 数组参数传递-多参数方法接收
 function noMiddlewareClick3() {
-    window.webkit.messageHandlers.noMiddleware_arrayWithP1.postMessage(['arrayElement1', 'arrayElement2']);
+    window.webkit.messageHandlers.noMiddleware_arrayWithP1P2.postMessage(['arrayElement1', 'arrayElement2']);
 }
 // 数组参数传递-多参数方法接收
 function noMiddlewareClick4() {
@@ -37,11 +37,11 @@ function middlewareClick3() {
 }
 // 集合参数传递-多参数方法接收
 function middlewareClick4() {
-    window.danielMiddlewareId.middleware_mutiObjWithP1('value1', 'value2', 'value3');
+    window.danielMiddlewareId.middleware_mutiObjWithP1P2('value1', 'value2', 'value3');
 }
 // 替换中间件中的 不替换方法
 function middlewareClick5() {
-    window.webkit.messageHandlers.middleware_notReplacedWithP1.postMessage(['arrayElement1', 'arrayElement2']);
+    window.webkit.messageHandlers.middleware_notReplacedWithP1P2.postMessage(['arrayElement1', 'arrayElement2']);
 }
 // 同名方法响应
 function middleware_sameMethodName() {

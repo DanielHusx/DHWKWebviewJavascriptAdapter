@@ -25,6 +25,7 @@ Pod::Spec.new do |spec|
   #   * Write the description between the DESC delimiters below.
   #   * Finally, don't worry about the indent, CocoaPods strips it!
   spec.description  = <<-DESC
+  "The Javascript middleware bridge suitable for WKWebview"
                    DESC
 
   spec.homepage     = "https://github.com/DanielHusx/DHWKWebviewJavascriptAdapter"
@@ -52,7 +53,7 @@ Pod::Spec.new do |spec|
   #  profile URL.
   #
 
-  spec.author             = { "Daniel" => "danielxing@163.com" }
+  spec.author             = { "DanielHusx" => "danielxing@163.com" }
   # Or just: spec.author    = "Daniel"
   # spec.authors            = { "Daniel" => "danielxing@163.com" }
   # spec.social_media_url   = "https://twitter.com/Daniel"

@@ -20,6 +20,12 @@
 
 @implementation DHWebviewJavascriptUtils
 
+/// 获取子协议(遵循DHJavascriptExport协议)的所有方法
++ (NSArray *)dh_instanceMethodsForClass:(Class)cls {
+    return [DHWebviewJavascriptUtils dh_instanceMethodsForClass:cls
+                                                 protocolString:NSStringFromProtocol(@protocol(DHJavascriptExport))];
+}
+
 /// 获取子协议(遵循protocolString协议)的所有方法
 /// @param cls class
 /// @param protocolString 基协议
@@ -60,20 +66,17 @@
 /// 调用实例方法
 ///
 /// @param obj 实例对象
-/// @param partialMethodName 方法名的部分
+/// @param originalMethodName 原生方法名
 /// @param parameter 参数 NSNumber, NSString, NSDate, NSArray, NSNull, NSDictionary
 + (void)dh_invokeInstanceMethodForObject:(NSObject *)obj
-                   withPartialMethodName:(NSString *)partialMethodName
+                  withOriginalMethodName:(NSString *)originalMethodName
                                parameter:(id)parameter {
     if (!obj) { return; }
-    
-    NSString *methodName = [self dh_matchCompleteInstanceMethodNameForObject:obj
-                                                       withPartialMethodName:partialMethodName
-                                                                   parameter:parameter];
-    if (!methodName) { return; }
+    if (![DHWebviewJavascriptUtils isValidString:originalMethodName]) { return; }
+    if (![obj respondsToSelector:NSSelectorFromString(originalMethodName)]) { return; }
     
     // 以下开始调用匿名方法
-    SEL sel = sel_getUid(methodName.UTF8String);
+    SEL sel = NSSelectorFromString(originalMethodName);//sel_getUid(originalMethodName.UTF8String);
     Method m = class_getInstanceMethod([obj class], sel);
     unsigned int argumentsCount = method_getNumberOfArguments(m) - 2;
     BOOL multiableArgument = argumentsCount > 1;
@@ -93,7 +96,7 @@
             [invocation setArgument:&argument atIndex:i+2];
         }
     } else if ([parameter isKindOfClass:[NSDictionary class]] && multiableArgument) {
-        NSArray *parameterKeys = [methodName componentsSeparatedByString:@":"];
+        NSArray *parameterKeys = [originalMethodName componentsSeparatedByString:@":"];
         // 接收的方法名是多参数，参数又是字典时，只有当字典key与方法名分段匹配时才分配对应参数
         // 否则直接分配给第一个
         BOOL hasMatchedKey = NO;
@@ -116,12 +119,11 @@
     [invocation invoke];
 }
 
-/// 根据提供的部分方法名以及参数类型，匹配完整的方法名
-+ (NSString *)dh_matchCompleteInstanceMethodNameForObject:(NSObject *)obj
-                                    withPartialMethodName:(NSString *)partialMethodName
+/// 通过js方法名查找对应响应的方法
++ (NSString *)dh_findMatchedOriginalMethodNameForReceiver:(NSObject *)receiver
+                                         withJSMethodName:(NSString *)jsMethodName
                                                 parameter:(id)parameter {
-    unsigned int count;
-    Method *methods = class_copyMethodList([obj class], &count);
+    if (!receiver) { return nil; }
     // 集合类型参数，可支持多类型参数
     NSUInteger aspectArgumentCount = 1;
     BOOL multiableArgument = NO;
@@ -129,13 +131,43 @@
         aspectArgumentCount = [parameter count];
         multiableArgument = YES;
     }
-    // 匹配方法名前缀一致 且参数个数匹配的方法名
+   
+    __block NSString *result;
+    NSArray *protocolMethods = [DHWebviewJavascriptUtils dh_instanceMethodsForClass:receiver.class];
+    
+    [protocolMethods enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        @autoreleasepool {
+            NSString *currentJSMethodName = [DHWebviewJavascriptUtils dh_convertOriginalMethodNameToJSMethodName:obj];
+            if ([currentJSMethodName isEqualToString:jsMethodName]) {
+                // 查找到对应方法，因为是协议方法可能未实现
+                if ([receiver respondsToSelector:NSSelectorFromString(obj)]) {
+                    Method method = class_getInstanceMethod(receiver.class, NSSelectorFromString(obj));
+                    unsigned int argumentCount = method_getNumberOfArguments(method) - 2;
+                    if (argumentCount == 0
+                        || (argumentCount == 1 && multiableArgument)
+                        || (argumentCount == aspectArgumentCount)) {
+                        result = obj;
+                        *stop = YES;
+                    }
+                }
+            }
+        }
+        
+    }];
+    /*
+    // 此代码是遍历类下所有方法，理论上只要协议的方法即可
+     
     NSString *result;
+    // 匹配方法名前缀一致 且参数个数匹配的方法名
+    unsigned int count;
+    Method *methods = class_copyMethodList([receiver class], &count);
+
     for (int i = 0; i < count; i++) {
         SEL sel = method_getName(methods[i]);
         NSString *methodName = @(sel_getName(sel));
-        // 匹配方法名前缀
-        if (![[self dh_methodPrefixName:methodName] isEqualToString:partialMethodName]) {
+        // 匹配方法名
+        NSString *currentJSMethodName = [self dh_convertOriginalMethodNameToJSMethodName:methodName];
+        if (![currentJSMethodName isEqualToString:jsMethodName]) {
             continue;
         }
         // 参数个数必须匹配 (target, SEL, argument1, ...)
@@ -149,10 +181,38 @@
             result = methodName;
             break;
         }
-        
+
     }
     free(methods);
+     */
     
+    return result;
+}
+
+/// 判定原生方法名以及参数类型，是否匹配
++ (NSString *)dh_matchedOriginalMethodNameForReceiver:(NSObject *)receiver
+                               withOriginalMethodName:(NSString *)originalMethodName
+                                            parameter:(id)parameter {
+    if (!receiver) { return nil; }
+    // 集合类型参数，可支持多类型参数
+    NSUInteger aspectArgumentCount = 1;
+    BOOL multiableArgument = NO;
+    if ([parameter isKindOfClass:[NSArray class]] || [parameter isKindOfClass:[NSDictionary class]]) {
+        aspectArgumentCount = [parameter count];
+        multiableArgument = YES;
+    }
+    NSString *result;
+    
+    SEL sel = NSSelectorFromString(originalMethodName);
+    if (![receiver respondsToSelector:sel]) { return nil; }
+
+    Method method = class_getInstanceMethod([receiver class], sel);
+    unsigned int argumentCount = method_getNumberOfArguments(method) - 2;
+    if (argumentCount == 0
+        || (argumentCount == 1 && multiableArgument)
+        || (argumentCount == aspectArgumentCount)) {
+        result = originalMethodName;
+    }
     return result;
 }
 
@@ -163,10 +223,16 @@
     return YES;
 }
 
-/// myMethod:param: => myMethod
-+ (NSString *)dh_methodPrefixName:(NSString *)name {
+/// myMethod:param: => myMethodParam
++ (NSString *)dh_convertOriginalMethodNameToJSMethodName:(NSString *)name {
     if (![self isValidString:name]) { return nil; }
-    return [name componentsSeparatedByString:@":"].firstObject;
+    
+    NSArray *components = [name componentsSeparatedByString:@":"];
+    NSMutableString *result = [components.firstObject mutableCopy];
+    for (NSUInteger i = 1; i < [components count]; i++) {
+        [result appendString:[components[i] capitalizedString]];
+    }
+    return [result copy];
 }
 
 /// myMethod:param: => [@"myMethod", @"param"]
@@ -184,13 +250,21 @@
 @implementation DHWebviewJavascriptUtils (Javascript)
 /// 替换方法的js，其中method与replaceMethod必须不一致
 /// @attention 替换方法名如已存在同名冲突，虽然能注入，但不会生效
+/// @param identifier 标记名
+/// @param originalMethodName oc原生方法名，例：myMethod:param:
+/// @param jsMethodName js响应方法名 ，例：myMethodParam
+/// @param jsReplacedMethodName js替换方法名，例：myMethodParam_my_tag
+/// @return 注入的js
 + (NSString *)dh_javascriptForIdentifier:(NSString *)identifier
-                                  method:(NSString *)method
-                          replacedMethod:(NSString *)replacedMethod {
+                      originalMethodName:(NSString *)originalMethodName
+                            jsMethodName:(NSString *)jsMethodName
+                    jsReplacedMethodName:(NSString *)jsReplacedMethodName {
     if (![DHWebviewJavascriptUtils isValidString:identifier]) { return nil; }
-    if (![DHWebviewJavascriptUtils isValidString:method]) { return nil; }
-    if (![DHWebviewJavascriptUtils isValidString:replacedMethod]) { return nil; }
-    if ([method isEqualToString:replacedMethod]) { return nil; }
+    if (![DHWebviewJavascriptUtils isValidString:jsMethodName]) { return nil; }
+    if (![DHWebviewJavascriptUtils isValidString:originalMethodName]) { return nil; }
+    if (![DHWebviewJavascriptUtils isValidString:jsReplacedMethodName]) { return nil; }
+    // 如果js方法名与替换的一致将导致方法无法触发App方法
+    if ([jsMethodName isEqualToString:jsReplacedMethodName]) { return nil; }
     /*
      实现以下
      identifier.replacedMethod = function(param) {
@@ -198,9 +272,9 @@
         webkit.webkit.messageHandlers.method.postMessage(message);
      }
      */
-    NSString *methodName = [self dh_methodPrefixName:method];
-    NSArray *methodParameters = [self dh_methodParametersName:method];
-    NSString *replacedMethodName = [self dh_methodPrefixName:replacedMethod];
+    NSString *methodName = jsMethodName;
+    NSArray *methodParameters = [self dh_methodParametersName:originalMethodName];
+    NSString *replacedMethodName = jsReplacedMethodName;
     
     // 识别替换的变量 identifier.replacedMethod
     NSString *variable = [self dh_javascriptForIdentifier:identifier method:methodName];
@@ -267,21 +341,33 @@
 // ################################################
 
 @interface WKUserContentController (DHMethodPoolExtension)
-/// 从方法匹配缓存池获取已经替换了的原方法名
-- (NSString *)dh_fetchReplacedMethodNameFromPoolWithMethodName:(NSString *)methodName;
+/// 获取加密的js方法名
+/// @param originalMethodName oc协议方法名，例：someMethod:withParam:
+/// @param jsMethodname js方法名，此时没有
+/// @return 加密的js方法名
+- (NSString *)dh_fetchEncodedJSMethodNameWithOriginalMethodName:(NSString *)originalMethodName
+                                                   jsMethodname:(NSString *)jsMethodname;
+/// 从注册的js方法名获取原方法名
+/// @param obj 方法所属对象
+/// @param jsMethodName js方法名
+/// @param jsParameter js传递参数
+/// @return oc协议原生方法名
+- (NSString *)dh_fetchDecodedMethodNameForObject:(NSObject *)obj
+                                withJSMethodName:(NSString *)jsMethodName
+                                     jsParameter:(id)jsParameter;
 @end
 
 @interface WKUserContentController (DHPropertyExtension) <WKScriptMessageHandler>
 /// 需要监听的消息
 @property (nonatomic, strong, readwrite) NSMutableArray *dh_registerScriptMessage;
-/// 监听的中间件 @{方法名：中间件对象}
+/// 监听的中间件 @{注册的js方法名：中间件对象}
 @property (nonatomic, strong) NSMutableDictionary *dh_registerScriptMiddleware;
-/// 脚本消息执行者 @{方法名：消息监听者}
+/// 脚本消息执行者 @{注册的js方法名：消息监听者}
 @property (nonatomic, strong) NSMutableDictionary *dh_registerScriptMessageHandler;
+/// oc原生方法与js方法的匹配池 @{oc对应的原生方法：js注册的方法名}
+@property (nonatomic, strong) NSMutableDictionary *dh_scriptMessageMethodNamePool;
 /// 需要注入的js
 @property (nonatomic, strong, readwrite) NSMutableArray *dh_injectedJavascript;
-/// 方法匹配池，用于缓存替换方法的注册消息名
-@property (nonatomic, strong) NSMutableDictionary *dh_scriptMessageMethodNamePool;
 
 @end
 
@@ -289,12 +375,9 @@
 
 - (void)userContentController:(WKUserContentController *)userContentController
       didReceiveScriptMessage:(WKScriptMessage *)message {
-    // 方法名替换池查找
-    NSString *methodName = [self dh_fetchReplacedMethodNameFromPoolWithMethodName:message.name];
-    if (!methodName) { methodName = message.name; }
     
     // 如果存在监听类实现该方法，则先调用监听类的方法
-    id handler = [self.dh_registerScriptMessageHandler objectForKey:methodName];
+    id handler = [self.dh_registerScriptMessageHandler objectForKey:message.name];
     if (handler
         && [handler respondsToSelector:@selector(userContentController:didReceiveScriptMessage:)]
         && handler != self) {
@@ -306,9 +389,15 @@
     id middleware = [self.dh_registerScriptMiddleware objectForKey:message.name];
     if (!middleware) { return; }
     
+    // 解密原生方法名
+    NSString *methodName = [self dh_fetchDecodedMethodNameForObject:middleware
+                                                   withJSMethodName:message.name
+                                                        jsParameter:message.body];
+    if (!methodName) { return; }
+    
     // 通过回调注册的方法名查找相应的方法进行调用
     [DHWebviewJavascriptUtils dh_invokeInstanceMethodForObject:middleware
-                                         withPartialMethodName:methodName
+                                        withOriginalMethodName:methodName
                                                      parameter:message.body];
 }
 
@@ -427,34 +516,56 @@
 
 @end
 
-#pragma mark -
+#pragma mark - *** 提取 ***
 @implementation WKUserContentController (DHMethodPoolExtension)
-/// 从方法匹配缓存池中获取匹配或新生成的方法名
-- (NSString *)dh_fetchMethodNameFromPoolWithMethodName:(NSString *)methodName {
-    if (![DHWebviewJavascriptUtils isValidString:methodName]) { return nil; }
+/// 获取加密的js方法名
+/// @param originalMethodName oc协议方法名，例：someMethod:withParam:
+/// @param jsMethodname js方法名，此时没有
+/// @return 加密的js方法名
+- (NSString *)dh_fetchEncodedJSMethodNameWithOriginalMethodName:(NSString *)originalMethodName
+                                                   jsMethodname:(NSString *)jsMethodname {
+    if (![DHWebviewJavascriptUtils isValidString:originalMethodName]) { return nil; }
+    if (![DHWebviewJavascriptUtils isValidString:jsMethodname]) { return nil; }
     
     // 生成过后同个WKUserContentController是不可注册同名方法的，即便使用多个中间件，只要WKUserContentController是同一个就不行
-    NSString *replacedMethodName = [self.dh_scriptMessageMethodNamePool objectForKey:methodName];
+    NSString *replacedMethodName = [self.dh_scriptMessageMethodNamePool objectForKey:originalMethodName];
     if (replacedMethodName) { return replacedMethodName; }
-    
-    // 不存在则新生成一个
-    replacedMethodName = [methodName stringByAppendingString:@"_dh_method_pool"];
-    [self.dh_scriptMessageMethodNamePool setObject:replacedMethodName forKey:methodName];
+
+    // 不存在则新生成一个加密的
+    replacedMethodName = [jsMethodname stringByAppendingString:@"_dh_method_pool"];
     return replacedMethodName;
 }
 
-/// 从方法匹配缓存池获取已经替换了的原方法名
-- (NSString *)dh_fetchReplacedMethodNameFromPoolWithMethodName:(NSString *)methodName {
-    if (![DHWebviewJavascriptUtils isValidString:methodName]) { return nil; }
-    if ([self.dh_scriptMessageMethodNamePool count] == 0) { return nil; }
+- (void)dh_appendJSMethodName:(NSString *)jsMethodName
+        forOriginalMethodName:(NSString *)originalMethodName {
+    [self.dh_scriptMessageMethodNamePool setObject:jsMethodName
+                                            forKey:originalMethodName];
+}
+
+/// 从注册的js方法名获取原方法名
+/// @param jsMethodName js方法名
+/// @param jsParameter js传递参数
+/// @return oc协议原生方法名
+- (NSString *)dh_fetchDecodedMethodNameForObject:(NSObject *)obj
+                                withJSMethodName:(NSString *)jsMethodName
+                                     jsParameter:(id)jsParameter  {
+    if (!obj) { return nil; }
+    if (![DHWebviewJavascriptUtils isValidString:jsMethodName]) { return nil; }
     
     __block NSString *result = nil;
-    [self.dh_scriptMessageMethodNamePool enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull obj, BOOL * _Nonnull stop) {
-        if ([methodName isEqualToString:obj]) {
-            result = key;
+    // 先从方法缓存池中查找对应的方法
+    [self.dh_scriptMessageMethodNamePool enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull originalMName, id  _Nonnull jsMName, BOOL * _Nonnull stop) {
+        if ([jsMethodName isEqualToString:jsMName]) {
+            result = originalMName;
             *stop = YES;
         }
     }];
+    if (!result) {
+        // 再从协议方法中寻找
+        result = [DHWebviewJavascriptUtils dh_findMatchedOriginalMethodNameForReceiver:obj
+                                                                      withJSMethodName:jsMethodName
+                                                                             parameter:jsParameter];
+    }
     return result;
 }
 
@@ -483,15 +594,15 @@
     }
     
     // 是否所有方法都需要替换
-    BOOL isAllNeedReplacedMethod = YES;
-    if ([middleware.class respondsToSelector:@selector(dh_javascriptAllNeedReplacedMethod)]) {
-        isAllNeedReplacedMethod = [middleware.class dh_javascriptAllNeedReplacedMethod];
+    DHJavascriptBridgeType bridgeType = DHJavascriptBridgeType_AllNotNeed;
+    if ([middleware.class respondsToSelector:@selector(dh_javascriptBridgeType)]) {
+        bridgeType = [middleware.class dh_javascriptBridgeType];
     }
     
     // 无需替换的方法
-    NSArray *needNotReplacedMethod = @[];
-    if ([middleware.class respondsToSelector:@selector(dh_javascriptNeedNotReplacedMethod)]) {
-        needNotReplacedMethod = [middleware.class dh_javascriptNeedNotReplacedMethod];
+    NSArray *needNotBridgeMethodNames = @[];
+    if ([middleware.class respondsToSelector:@selector(dh_javascriptNeedNotBridgeMethodNames)]) {
+        needNotBridgeMethodNames = [middleware.class dh_javascriptNeedNotBridgeMethodNames];
     }
     
     NSMutableArray *injectJavascriptList = [NSMutableArray array];
@@ -501,36 +612,41 @@
     }
     
     // 遍历对象DHJavascriptExport子协议的所有必要实例方法
-    NSArray *methods = [DHWebviewJavascriptUtils dh_instanceMethodsForClass:middleware.class
-                                                             protocolString:@"DHJavascriptExport"];
+    NSArray *methods = [DHWebviewJavascriptUtils dh_instanceMethodsForClass:middleware.class];
     for (NSString *method in methods) {
         @autoreleasepool {
             // 中间件实现的方法名前缀
-            NSString *methodName = [DHWebviewJavascriptUtils dh_methodPrefixName:method];
+            NSString *jsMethodName = [DHWebviewJavascriptUtils dh_convertOriginalMethodNameToJSMethodName:method];
             
             // 如果所有的方法都需要替换，或无需替换方法池中不存在该方法名，那么就从缓存取新生成的方法名
             // 网页中替换的方法名称
-            NSString *replacedMethodName;
-            if (isAllNeedReplacedMethod || ![needNotReplacedMethod containsObject:method]) {
-                replacedMethodName = [self dh_fetchMethodNameFromPoolWithMethodName:methodName];
+            NSString *jsReplacedMethodName;
+            if ((bridgeType == DHJavascriptBridgeType_AllNeed)
+                || (bridgeType == DHJavascriptBridgeType_NotAllNeed && ![needNotBridgeMethodNames containsObject:method])) {
+                jsReplacedMethodName = [self dh_fetchEncodedJSMethodNameWithOriginalMethodName:method jsMethodname:jsMethodName];
+                [self dh_appendJSMethodName:jsReplacedMethodName forOriginalMethodName:method];
+            } else {
+                [self dh_appendJSMethodName:jsMethodName forOriginalMethodName:method];
             }
             
             // 监听js回调
             // 两个方法都监听是无所谓的，因为网页已经实现的同名function情况下，理论上监听自然无效
-            if (![self.dh_registerScriptMessage containsObject:methodName]) {
-                [self addScriptMessageHandler:(id<WKScriptMessageHandler>)self name:methodName];
-                [self.dh_registerScriptMiddleware addEntriesFromDictionary:@{methodName:middleware}];
+            if (![self.dh_registerScriptMessage containsObject:jsMethodName]) {
+                [self dh_appendMiddleware:middleware forMessage:jsMethodName];
             }
-            if (replacedMethodName && ![self.dh_registerScriptMessage containsObject:replacedMethodName]) {
-                [self addScriptMessageHandler:(id<WKScriptMessageHandler>)self name:replacedMethodName];
-                [self.dh_registerScriptMiddleware addEntriesFromDictionary:@{replacedMethodName:middleware}];
+            
+            if (!jsReplacedMethodName) { continue; }
+            
+            if (![self.dh_registerScriptMessage containsObject:jsReplacedMethodName]) {
+                [self dh_appendMiddleware:middleware forMessage:jsReplacedMethodName];
             }
             
             // 注入替换的js
             // 只有当不同名存在时才需要注入等价替换js
             NSString *js = [DHWebviewJavascriptUtils dh_javascriptForIdentifier:identifier
-                                                                         method:method
-                                                                 replacedMethod:replacedMethodName];
+                                                             originalMethodName:method
+                                                                   jsMethodName:jsMethodName
+                                                           jsReplacedMethodName:jsReplacedMethodName];
             if (!js) { continue; }
             [injectJavascriptList addObject:js];
         
@@ -546,6 +662,10 @@
     [self.dh_injectedJavascript addObjectsFromArray:injectJavascriptList];
 }
 
+- (void)dh_appendMiddleware:(id)middleware forMessage:(NSString *)message {
+    [self addScriptMessageHandler:(id<WKScriptMessageHandler>)self name:message];
+    [self.dh_registerScriptMiddleware setValue:middleware forKey:message];
+}
 
 @end
 

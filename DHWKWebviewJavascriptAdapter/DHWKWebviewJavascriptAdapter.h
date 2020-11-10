@@ -41,6 +41,15 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
+/// 桥接类型
+typedef NS_ENUM(NSInteger, DHJavascriptBridgeType) {
+    /// 所有方法都不需要桥接
+    DHJavascriptBridgeType_AllNotNeed,
+    /// 所有方法都需要桥接
+    DHJavascriptBridgeType_AllNeed,
+    /// 部分方法需要桥接，配合-dh_javascriptNeedNotBridgeMethodNames使用
+    DHJavascriptBridgeType_NotAllNeed,
+};
 
 @protocol DHJavascriptExport <NSObject>
 @optional
@@ -48,22 +57,25 @@ NS_ASSUME_NONNULL_BEGIN
 /// @attention 必须与javascriptReplacedMethods同时使用才会有意义
 + (NSString *)dh_javascriptIdentifier;
 
-/**
- @brief 是否所有的都需要替换，默认为YES
+/// @brief 是否所有的都需要替换，默认为DHJavascriptBridgeType_AllNotNeed
+///
+/// @discussion 当+dh_javascriptIdentifier有效返回时，此方法才会生效，生效后将可能缓存需要注入替换的js。
+///
+/// ①window.webkit.messageHandlers.methodName.postMessage('");
+/// ②daniel.methodName("");
+/// 只存在①的情况，应设置DHJavascriptBridgeType_AllNeed；
+/// 只存在②的情况，应设置DHJavascriptBridgeType_AllNotNeed
+/// 当①②都存在的情况下，则需要实现+dh_javascriptIdentifier且此方法返回DHJavascriptBridgeType_NotAllNeed，另需要在+dh_javascriptNeedNotBridgeMethodNames中返回无需替换的方法名（即上述 完整的调用方法的方法名）
++ (DHJavascriptBridgeType)dh_javascriptBridgeType;
 
- @discussion 当+dh_javascriptIdentifier有效返回时，此方法才会生效，生效后将可能缓存需要注入替换的js。
- 当js不存在完整的调用方法（例：window.webkit.messageHandlers.methodName.postMessage('");） 时，则此方法应该返回YES；
- 当不存在不完整的调用方法（例：daniel.methodName("");）时，则可不实现+dh_javascriptIdentifier或此方法返回NO；
- 当上述两种调用方式都存在的情况下，则需要实现+dh_javascriptIdentifier且此方法返回NO，另需要在+dh_javascriptNeedNotReplacedMethod中返回无需替换的方法名（即上述 完整的调用方法的方法名）
- */
-+ (BOOL)dh_javascriptAllNeedReplacedMethod;
-
-/// 不需要替换的方法名（即在js中使用window.webkit.messageHandlers.methodName.postMessage("");发送的方法名）
-/// @attention 方法名必须填写完整的方法，并且在冒号之前的方法名与js中的方法名匹配
+/// @brief 不需要桥接的方法名（即在js中使用window.webkit.messageHandlers.methodName.postMessage("");发送的方法名）
+///
+/// @attention 方法名必须填写完整的方法，并且在冒号之前的方法名与js中的方法名匹配；仅在dh_javascriptBridgeType为DHJavascriptBridgeType_NotAllNeed有效
+///
 /// 例如：
 /// method 对应 window.webkit.messageHandlers.method.postMessage("");
-/// methodWithParam1:param2: 对应 window.webkit.messageHandlers.methodWithParam1.postMessage("");
-+ (NSArray *)dh_javascriptNeedNotReplacedMethod;
+/// methodWithParam1:param2: 对应 window.webkit.messageHandlers.methodWithParam1Param2.postMessage("");
++ (NSArray *)dh_javascriptNeedNotBridgeMethodNames;
 
 /// 额外需要注入的js数组
 + (NSArray *)dh_javascriptExtendInject;

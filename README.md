@@ -117,3 +117,9 @@ window.dh_identifity.jsMethodNameWithP1P2P3("p1", "p2", "p3");
   - 解决方案：
     1. 全局定义宏`DH_WKWEBVIEW_NOT_SWIZZLING`
     2. 在`-webView:didFinishNavigation:`中使用`-dh_injectJavascriptIfNeed`进行手动注入
+
+
+
+
+
+[MIT LICENSE](https://github.com/DanielHusx/DHWKWebviewJavascriptAdapter/blob/main/LICENSE)

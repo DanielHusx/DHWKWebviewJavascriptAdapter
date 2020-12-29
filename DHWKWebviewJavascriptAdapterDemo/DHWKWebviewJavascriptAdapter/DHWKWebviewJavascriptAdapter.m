@@ -23,24 +23,23 @@
 /// 获取子协议(遵循DHJavascriptExport协议)的所有方法
 + (NSArray *)dh_instanceMethodsForClass:(Class)cls {
     return [DHWebviewJavascriptUtils dh_instanceMethodsForClass:cls
-                                                 protocolString:NSStringFromProtocol(@protocol(DHJavascriptExport))];
+                                                   baseProtocol:@protocol(DHJavascriptExport)];
 }
 
 /// 获取子协议(遵循protocolString协议)的所有方法
 /// @param cls class
-/// @param protocolString 基协议
-+ (NSArray *)dh_instanceMethodsForClass:(Class)cls protocolString:(NSString *)protocolString {
+/// @param baseProtocol 基协议
++ (NSArray *)dh_instanceMethodsForClass:(Class)cls baseProtocol:(Protocol *)baseProtocol {
     // 基协议
-    Protocol *protocol = NSProtocolFromString(protocolString);
-    if (!class_conformsToProtocol(cls, protocol)) { return nil; }
+    if (!class_conformsToProtocol(cls, baseProtocol)) { return nil; }
     
-    // 获取子协议列表，去查找子协议
+    // 获取类所遵循的协议列表，去查找符合protocolString的子协议
     unsigned int protocolCount;
     Protocol * __unsafe_unretained *protocol_list = class_copyProtocolList(cls, &protocolCount);
     Protocol *conformedProtocol;
     for (int i = 0; i < protocolCount; i++) {
-        if (protocol_conformsToProtocol(protocol_list[i], protocol)
-            && !protocol_isEqual(protocol_list[i], protocol)) {
+        if (protocol_conformsToProtocol(protocol_list[i], baseProtocol)
+            && !protocol_isEqual(protocol_list[i], baseProtocol)) {
             conformedProtocol = protocol_list[i];
             break;
         }
@@ -49,18 +48,41 @@
     // 未查找到遵循的基协议的子协议
     if (!conformedProtocol) { return nil; }
     
+    // 循环遍历协议所遵循的协议列表，以获得所有定义的方法列表
+    NSMutableSet *methodList = [NSMutableSet set];
+    [self traverseSuperProtocolsForMethodsWithProtocol:conformedProtocol baseProtocol:baseProtocol methods:methodList];
+    
+    return [methodList allObjects];
+}
+
+/// 遍历父协议直到基协议获取所有方法
+///
+/// @param protocol 协议
+/// @param baseProtocol 基协议
+/// @param methods 方法集合
++ (void)traverseSuperProtocolsForMethodsWithProtocol:(Protocol *)protocol baseProtocol:(Protocol *)baseProtocol methods:(NSMutableSet *)methods {
+    // 当协议不遵循基协议或等于基协议时跳出循环
+    if (!protocol_conformsToProtocol(protocol, baseProtocol)) { return ; }
+    if (protocol_isEqual(protocol, @protocol(NSObject))) { return ; }
+    if (protocol_isEqual(protocol, baseProtocol)) { return ; }
+    
     // 获取子协议的方法（必要(require)且是实例方法）列表
     unsigned int count;
-    struct objc_method_description *protocol_method_list = protocol_copyMethodDescriptionList(conformedProtocol, YES, YES, &count);
-    NSMutableArray *methodList = [NSMutableArray arrayWithCapacity:count];
+    struct objc_method_description *protocol_method_list = protocol_copyMethodDescriptionList(protocol, YES, YES, &count);
     
     for (int i = 0; i < count; i ++) {
         SEL sel = protocol_method_list[i].name;
-        [methodList addObject:@(sel_getName(sel))];
+        [methods addObject:@(sel_getName(sel))];
     }
     free(protocol_method_list);
     
-    return [methodList copy];
+    // 遍历父协议
+    unsigned int protocolCount;
+    Protocol * __unsafe_unretained *protocol_list = protocol_copyProtocolList(protocol, &protocolCount);
+    for (int i = 0; i < protocolCount; i++) {
+        [self traverseSuperProtocolsForMethodsWithProtocol:protocol_list[i] baseProtocol:baseProtocol methods:methods];
+    }
+    free(protocol_list);
 }
 
 /// 调用实例方法

@@ -22,6 +22,8 @@
 + (NSArray *)dh_javascriptNeedNotBridgeMethodNames {
     return @[
         NSStringFromSelector(@selector(middleware_notReplacedWithP1:p2:)),
+        // 同名方法如果不注入，那么就是重复方法，那将会导致某一个不生效
+//        NSStringFromSelector(@selector(commonMiddleware_noParam))
     ];
 }
 
@@ -57,6 +59,11 @@
 
 - (void)middleware_mutiObjWithP1P2:(id)p1 {
     [self showAlertForMessage:[NSString stringWithFormat:@"%@ invoke %s \nreceived: [p1:(class:%@)%@];]", self, __PRETTY_FUNCTION__, NSStringFromClass([p1 class]), p1]];
+}
+
+/// 与无替换中间件同名方法
+- (void)commonMiddleware_noParam {
+    [self showAlertForMessage:[NSString stringWithFormat:@"%@ invoke %s", self, __PRETTY_FUNCTION__]];
 }
 
 #pragma mark - other

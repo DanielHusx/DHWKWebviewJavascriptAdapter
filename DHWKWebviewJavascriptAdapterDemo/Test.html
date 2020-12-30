@@ -20,6 +20,10 @@ function noMiddlewareClick3() {
 function noMiddlewareClick4() {
     window.webkit.messageHandlers.noMiddleware_singleObj.postMessage(['arrayElement1', 'arrayElement2']);
 }
+// 与替换中间件同名方法
+function noMiddlewareClick5() {
+    window.webkit.messageHandlers.commonMiddleware_noParam.postMessage('value');
+}
 
 // -----------------------------
 // Middleware
@@ -47,6 +51,16 @@ function middlewareClick5() {
 function middleware_sameMethodName() {
     window.danielMiddlewareId.middleware_sameMethodName('value1', 'value2', 'value3');
 }
+// 与无替换中间件同名方法
+function middlewareClick6() {
+    window.danielMiddlewareId.commonMiddleware_noParam('value1', 'value2', 'value3');
+}
+
+// ---------------------
+// 第三监听者（非中间者管理，散兵游勇）
+function vendorUserHandlerClick() {
+    window.webkit.messageHandlers.vendorUserHandler.postMessage('value');
+}
 
 </script>
 <style>
@@ -63,6 +77,7 @@ function middleware_sameMethodName() {
 <button class="commonButton" type="button" onclick="noMiddlewareClick2()">单参数传递单-参数方法接收</button>
 <button class="commonButton" type="button" onclick="noMiddlewareClick3()">数组参数传递-多参数方法接收</button>
 <button class="commonButton" type="button" onclick="noMiddlewareClick4()">数组参数传递-单参数方法接收</button>
+<button class="commonButton" type="button" onclick="noMiddlewareClick5()">与替换中间件同名方法接收</button>
 
 <p>存在不替换js中间件-window.danielMiddlewareId.method(''); 其中danielMiddlewareId为中间件标记名<p>
 <button class="commonButton" type="button" onclick="middlewareClick1()">单参数传递单-空参数方法接收</button>
@@ -71,6 +86,10 @@ function middleware_sameMethodName() {
 <button class="commonButton" type="button" onclick="middlewareClick4()">集合参数传递-多参数方法接收</button>
 <button class="commonButton" type="button" onclick="middlewareClick5()">不替换方法</button>
 <button class="commonButton" type="button" onclick="middleware_sameMethodName()">同名方法响应</button>
+<button class="commonButton" type="button" onclick="middlewareClick6()">与无替换中间件同名方法响应</button>
+
+<p>监听脚本第三者<p>
+<button class="commonButton" type="button" onclick="vendorUserHandlerClick()">与无替换中间件同名方法响应</button>
 
 </body>
 </html>

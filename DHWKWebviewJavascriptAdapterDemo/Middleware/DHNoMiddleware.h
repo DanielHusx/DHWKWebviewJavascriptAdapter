@@ -17,6 +17,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)noMiddleware_arrayWithP1:(id)p1 p2:(id)p2;
 /// 不接收参数的形式
 - (void)noMiddleware_noParam;
+/// 与替换中间件同名方法
+- (void)commonMiddleware_noParam;
 
 @end
 

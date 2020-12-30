@@ -31,6 +31,10 @@
     [self showAlertForMessage:[NSString stringWithFormat:@"%@ invoke %s", self, __PRETTY_FUNCTION__]];
 }
 
+/// 与替换中间件同名方法
+- (void)commonMiddleware_noParam {
+    [self showAlertForMessage:[NSString stringWithFormat:@"%@ invoke %s", self, __PRETTY_FUNCTION__]];
+}
 
 #pragma mark - other
 - (void)showAlertForMessage:(NSString *)message {

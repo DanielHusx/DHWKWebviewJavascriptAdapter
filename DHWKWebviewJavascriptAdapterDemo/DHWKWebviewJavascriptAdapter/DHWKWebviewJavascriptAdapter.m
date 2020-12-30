@@ -316,7 +316,9 @@
 
 /// identifier = webkit.messageHandlers;
 + (NSString *)dh_javascriptForIdentifier:(NSString *)identifier {
-    return [NSString stringWithFormat:@"%@ = webkit.messageHandlers;", identifier];
+    // 中间件标识，其实没必要是 webkit.messageHandlers，对于网页来说，只要是挂载在window下的对象即可
+    return [NSString stringWithFormat:@"%@ = new Object();", identifier];
+//    return [NSString stringWithFormat:@"%@ = webkit.messageHandlers;", identifier];
 }
 
 /// identifier.myMethod
@@ -364,11 +366,13 @@
 
 @interface WKUserContentController (DHMethodPoolExtension)
 /// 获取加密的js方法名
+/// @param obj 中间件对象
 /// @param originalMethodName oc协议方法名，例：someMethod:withParam:
 /// @param jsMethodname js方法名，此时没有
 /// @return 加密的js方法名
-- (NSString *)dh_fetchEncodedJSMethodNameWithOriginalMethodName:(NSString *)originalMethodName
-                                                   jsMethodname:(NSString *)jsMethodname;
+- (NSString *)dh_fetchEncodedJSMethodNameForObject:(NSObject *)obj
+                            withOriginalMethodName:(NSString *)originalMethodName
+                                      jsMethodName:(NSString *)jsMethodname;
 /// 从注册的js方法名获取原方法名
 /// @param obj 方法所属对象
 /// @param jsMethodName js方法名
@@ -386,7 +390,7 @@
 @property (nonatomic, strong) NSMutableDictionary *dh_registerScriptMiddleware;
 /// 脚本消息执行者 @{注册的js方法名：消息监听者}
 @property (nonatomic, strong) NSMutableDictionary *dh_registerScriptMessageHandler;
-/// oc原生方法与js方法的匹配池 @{oc对应的原生方法：js注册的方法名}
+/// oc原生方法与js方法的匹配池 @{中间件对象类名:@{oc对应的原生方法：js注册的方法名}}
 @property (nonatomic, strong) NSMutableDictionary *dh_scriptMessageMethodNamePool;
 /// 需要注入的js
 @property (nonatomic, strong, readwrite) NSMutableArray *dh_injectedJavascript;
@@ -541,27 +545,39 @@
 #pragma mark - *** 提取 ***
 @implementation WKUserContentController (DHMethodPoolExtension)
 /// 获取加密的js方法名
+/// @param obj 中间件对象
 /// @param originalMethodName oc协议方法名，例：someMethod:withParam:
-/// @param jsMethodname js方法名，此时没有
+/// @param jsMethodName js方法名，此时没有
 /// @return 加密的js方法名
-- (NSString *)dh_fetchEncodedJSMethodNameWithOriginalMethodName:(NSString *)originalMethodName
-                                                   jsMethodname:(NSString *)jsMethodname {
+- (NSString *)dh_fetchEncodedJSMethodNameForObject:(NSObject *)obj
+                            withOriginalMethodName:(NSString *)originalMethodName
+                                      jsMethodName:(NSString *)jsMethodName {
+    if (!obj) { return nil; }
     if (![DHWebviewJavascriptUtils isValidString:originalMethodName]) { return nil; }
-    if (![DHWebviewJavascriptUtils isValidString:jsMethodname]) { return nil; }
+    if (![DHWebviewJavascriptUtils isValidString:jsMethodName]) { return nil; }
     
+    NSString *className = NSStringFromClass(obj.class);
+    NSMutableDictionary *objectJsMethods = [self.dh_scriptMessageMethodNamePool objectForKey:className] ?: [NSMutableDictionary dictionary];
     // 生成过后同个WKUserContentController是不可注册同名方法的，即便使用多个中间件，只要WKUserContentController是同一个就不行
-    NSString *replacedMethodName = [self.dh_scriptMessageMethodNamePool objectForKey:originalMethodName];
+    NSString *replacedMethodName = [objectJsMethods objectForKey:originalMethodName];
     if (replacedMethodName) { return replacedMethodName; }
 
     // 不存在则新生成一个加密的
-    replacedMethodName = [jsMethodname stringByAppendingString:@"_dh_method_pool"];
+    replacedMethodName = [jsMethodName stringByAppendingFormat:@"_%@", className];
     return replacedMethodName;
 }
 
-- (void)dh_appendJSMethodName:(NSString *)jsMethodName
-        forOriginalMethodName:(NSString *)originalMethodName {
-    [self.dh_scriptMessageMethodNamePool setObject:jsMethodName
-                                            forKey:originalMethodName];
+- (void)dh_appendJSMethodForObject:(NSObject *)obj
+                  withJSMethodName:(NSString *)jsMethodName
+                originalMethodName:(NSString *)originalMethodName {
+    NSString *className = NSStringFromClass(obj.class);
+    NSMutableDictionary *objectJsMethods = [self.dh_scriptMessageMethodNamePool objectForKey:className] ?: [NSMutableDictionary dictionary];
+    
+    [objectJsMethods setObject:jsMethodName
+                        forKey:originalMethodName];
+    
+    [self.dh_scriptMessageMethodNamePool setObject:objectJsMethods
+                                            forKey:className];
 }
 
 /// 从注册的js方法名获取原方法名
@@ -574,9 +590,12 @@
     if (!obj) { return nil; }
     if (![DHWebviewJavascriptUtils isValidString:jsMethodName]) { return nil; }
     
+    NSString *className = NSStringFromClass(obj.class);
+    NSDictionary *objectScriptMessageMethodNamePool = [self.dh_scriptMessageMethodNamePool objectForKey:className];
     __block NSString *result = nil;
+    
     // 先从方法缓存池中查找对应的方法
-    [self.dh_scriptMessageMethodNamePool enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull originalMName, id  _Nonnull jsMName, BOOL * _Nonnull stop) {
+    [objectScriptMessageMethodNamePool enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull originalMName, id  _Nonnull jsMName, BOOL * _Nonnull stop) {
         if ([jsMethodName isEqualToString:jsMName]) {
             result = originalMName;
             *stop = YES;
@@ -645,19 +664,20 @@
             NSString *jsReplacedMethodName;
             if ((bridgeType == DHJavascriptBridgeType_AllNeed)
                 || (bridgeType == DHJavascriptBridgeType_NotAllNeed && ![needNotBridgeMethodNames containsObject:method])) {
-                jsReplacedMethodName = [self dh_fetchEncodedJSMethodNameWithOriginalMethodName:method jsMethodname:jsMethodName];
-                [self dh_appendJSMethodName:jsReplacedMethodName forOriginalMethodName:method];
+                jsReplacedMethodName = [self dh_fetchEncodedJSMethodNameForObject:middleware withOriginalMethodName:method jsMethodName:jsMethodName];
+                [self dh_appendJSMethodForObject:middleware withJSMethodName:jsReplacedMethodName originalMethodName:method];
             } else {
-                [self dh_appendJSMethodName:jsMethodName forOriginalMethodName:method];
+                [self dh_appendJSMethodForObject:middleware withJSMethodName:jsMethodName originalMethodName:method];
             }
             
-            // 监听js回调
-            // 两个方法都监听是无所谓的，因为网页已经实现的同名function情况下，理论上监听自然无效
-            if (![self.dh_registerScriptMessage containsObject:jsMethodName]) {
-                [self dh_appendMiddleware:middleware forMessage:jsMethodName];
-            }
             
-            if (!jsReplacedMethodName) { continue; }
+            if (!jsReplacedMethodName) {
+                // 监听js回调
+                if (![self.dh_registerScriptMessage containsObject:jsMethodName]) {
+                    [self dh_appendMiddleware:middleware forMessage:jsMethodName];
+                }
+                continue;
+            }
             
             if (![self.dh_registerScriptMessage containsObject:jsReplacedMethodName]) {
                 [self dh_appendMiddleware:middleware forMessage:jsReplacedMethodName];

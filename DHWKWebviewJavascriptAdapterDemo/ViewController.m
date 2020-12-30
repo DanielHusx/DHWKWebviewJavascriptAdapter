@@ -33,7 +33,7 @@
 - (void)viewDidDisappear:(BOOL)animated {
     [super viewDidDisappear:animated];
     // 移除所有脚本监听
-    [self.webView.configuration.userContentController removeAllUserScripts];
+    [self.webView.configuration.userContentController dh_removeAllScriptMessageHandler];
 }
 
 
@@ -67,6 +67,8 @@
     // 虽然可以注册两个中间件，但是注意方法名勿重复
     [userContentController dh_registerMiddleware:[[DHNoMiddleware alloc] init]];
     [userContentController dh_registerMiddleware:[[DHMiddleware alloc] init]];
+    // 自定义监听的方法
+    [userContentController addScriptMessageHandler:self name:@"vendorUserHandler"];
 }
 
 
@@ -83,6 +85,7 @@
 #pragma mark - WKScriptMessageHandler
 - (void)userContentController:(WKUserContentController *)userContentController didReceiveScriptMessage:(WKScriptMessage *)message {
     NSLog(@"%@ didReceiveScriptMessage: [name:%@] [body:%@]", NSStringFromClass(self.class), message.name, message.body);
+    [self showAlertForMessage:[NSString stringWithFormat:@"%@ invoke %s name:%@, body:%@", self, __PRETTY_FUNCTION__, message.name, message.body]];
 }
 
 
@@ -96,6 +99,7 @@
     [self presentViewController:alertController animated:YES completion:nil];
     
 }
+
 - (void)webView:(WKWebView *)webView runJavaScriptConfirmPanelWithMessage:(NSString *)message initiatedByFrame:(WKFrameInfo *)frame completionHandler:(void (^)(BOOL))completionHandler{
     UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"提示" message:message?:@"" preferredStyle:UIAlertControllerStyleAlert];
     [alertController addAction:([UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
@@ -119,5 +123,24 @@
     [self presentViewController:alertController animated:YES completion:nil];
 }
 
+
+#pragma mark - other
+- (void)showAlertForMessage:(NSString *)message {
+    NSLog(@"%@", message);
+
+    UIWindow *keyWindow;
+    if (@available(iOS 13.0, *)) {
+        keyWindow = [[UIApplication sharedApplication].windows lastObject];
+    } else {
+        keyWindow = [UIApplication sharedApplication].keyWindow;
+    }
+
+    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:NSStringFromClass(self.class) message:message?:@"" preferredStyle:UIAlertControllerStyleAlert];
+    [alertController addAction:([UIAlertAction actionWithTitle:@"确认" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        
+    }])];
+
+    [keyWindow.rootViewController presentViewController:alertController animated:YES completion:nil];
+}
 
 @end
